@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -31,7 +29,6 @@ type Auth struct {
 	Scope         string
 	verifier      string
 	challenge     string
-	code          string
 }
 
 // New build an auth struct with given config info.
@@ -89,33 +86,44 @@ func (pa Auth) GenerateAuthCodeURL() string {
 		pa.AuthEndpoint, pa.ClientID, pa.RedirectURI, pa.challenge)
 }
 
-// SetAuthCode adds the auth code to the struct in order to retrieve the token
-func (pa Auth) SetAuthCode(code string) {
-	pa.code = code
+// RetrieveToken makes call to the token URL and returns auth token
+func (pa Auth) RetrieveToken(code string) (*http.Response, error) {
+	data := generateURLData(map[string]string{
+		"grant_type":    "authorization_code",
+		"client_id":     pa.ClientID,
+		"code":          code,
+		"redirect_uri":  pa.RedirectURI,
+		"code_verifier": pa.verifier,
+	})
+
+	return http.Post(pa.TokenEndpoint, "application/x-www-form-urlencoded", strings.NewReader(data))
+
+	// defer res.Body.Close()
+	// body, err := ioutil.ReadAll(res.Body)
+	// if err != nil {
+	// 	print(err)
+	// }
+	// fmt.Println(string(body))
 }
-func (pa Auth) RetrieveToken() {
+
+// RetrieveRefreshedToken takens a refresh token from the previous request and uses it to retrieve a new auth token
+func (pa Auth) RetrieveRefreshedToken(refreshToken string) (*http.Response, error) {
+	data := generateURLData(map[string]string{
+		"grant_type":    "refresh_token",
+		"refresh_token": refreshToken,
+		"client_id":     pa.ClientID,
+	})
+
+	return http.Post(pa.TokenEndpoint, "application/x-www-form-urlencoded", strings.NewReader(data))
+}
+
+func generateURLData(values map[string]string) string {
 	urlData := url.Values{}
-	urlData.Set("grant_type", "authorization_code")
-	urlData.Set("client_id", pa.ClientID)
-	urlData.Set("code", pa.code)
-	urlData.Set("redirect_uri", pa.RedirectURI)
-	urlData.Set("code_verifier", pa.verifier)
-
-	res, err := http.Post("https://accounts.spotify.com/api/token",
-		"application/x-www-form-urlencoded", strings.NewReader(urlData.Encode()))
-	if err != nil {
-		log.Println(err)
-		return
+	for key, value := range values {
+		urlData.Set(key, value)
 	}
-
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		print(err)
-	}
-	fmt.Println(string(body))
+	return urlData.Encode()
 }
-
 func urlEncode(value []byte) string {
 	return base64.RawURLEncoding.EncodeToString(value)
 }
