@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -76,18 +77,28 @@ func GenerateCodeChallenge(codeVerifier string, encode bool) string {
 }
 
 // GenerateAuthCodeURL returns the url used to retrieve auth code
-func (pa Auth) GenerateAuthCodeURL() string {
-	verifier, _ := GenerateCodeVerifier(maxVerifierLength, true)
+func (pa *Auth) GenerateAuthCodeURL() string {
+	verifier, _ := GenerateCodeVerifier(64, true)
 	challenge := GenerateCodeChallenge(verifier, true)
 	pa.verifier = verifier
 	pa.challenge = challenge
 
+	log.Println(pa.verifier)
+	log.Println(pa.challenge)
 	return fmt.Sprintf("%s?client_id=%s&response_type=code&redirect_uri=%s&code_challenge_method=S256&code_challenge=%s",
 		pa.AuthEndpoint, pa.ClientID, pa.RedirectURI, pa.challenge)
+
+	// server := &http.Server{Addr: pa.RedirectURI}
+
+	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// 	code := r.URL.Query().Get("code")
+	// 	log.Println(code)
+	// })
+
 }
 
 // RetrieveToken makes call to the token URL and returns auth token
-func (pa Auth) RetrieveToken(code string) (*http.Response, error) {
+func (pa *Auth) RetrieveToken(code string) (*http.Response, error) {
 	data := generateURLData(map[string]string{
 		"grant_type":    "authorization_code",
 		"client_id":     pa.ClientID,
@@ -95,7 +106,6 @@ func (pa Auth) RetrieveToken(code string) (*http.Response, error) {
 		"redirect_uri":  pa.RedirectURI,
 		"code_verifier": pa.verifier,
 	})
-
 	return http.Post(pa.TokenEndpoint, "application/x-www-form-urlencoded", strings.NewReader(data))
 
 	// defer res.Body.Close()
@@ -124,6 +134,7 @@ func generateURLData(values map[string]string) string {
 	}
 	return urlData.Encode()
 }
+
 func urlEncode(value []byte) string {
 	return base64.RawURLEncoding.EncodeToString(value)
 }
